@@ -1,0 +1,61 @@
+version: "3.9"
+volumes:
+  pgdata:
+networks:
+  crud_net:
+services:
+  db:
+#    volumes:
+#      - .:/docker-entrypoint-initdb.d/
+#      - pgdata:/var/lib/postgresql/data
+#      - ./logs:/var/log
+    image: postgres:14.5-alpine3.16
+#    build: ./postgresdb/
+    ports:
+    - "5432:5432"
+    environment:
+      POSTGRES_DB: "${DB_NAME}"
+      POSTGRES_USER: "${DB_USER}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
+    restart: unless-stopped
+
+    networks:
+      - crud_net
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d crud_db"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+#    entrypoint: ./entrypoint.sh
+
+
+  nginx:
+    image: nginx:latest
+    volumes:
+      - ./nginx:/nginx
+    ports: ["8080:80"]
+    networks:
+      - crud_net
+    depends_on:
+      - backend
+
+
+  backend:
+    build: .
+#    volumes:
+#      - .:/usr/src/crud/
+    depends_on:
+      - db # старт после старта контейнера postgres
+    ports:
+      - "8888:8000"
+    restart: unless-stopped
+    networks:
+      - crud_net
+    command: bash -c "gunicorn stocks_products.wsgi -b 0.0.0.0:8000"
+    env_file:
+      - .env
+
+#bash -c "python manage.py makemigrations" && bash -c "python manage.py migrate" && bash -c "python collectstatic" &&
